@@ -11,5 +11,4 @@ $config = require __DIR__ . '/config/main.php';
 
 $app = new \service\App($config);
 $app->run();
-
-exit(PHP_EOL);
+exit;
