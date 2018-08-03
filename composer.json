@@ -1,0 +1,25 @@
+{
+    "name": "wanghaibo/wechat",
+    "description": "wechat",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "夜云",
+            "email": "644362887@qq.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "catfan/medoo": "dev-master",
+        "monolog/monolog": "1.x-dev"
+    },
+    "autoload": {
+        "psr-4": {
+            "models\\": "models/",
+            "library\\": "library/",
+            "commands\\": "commands/",
+            "service\\": "service/",
+            "redis\\": "redis/"
+        }
+    }
+}

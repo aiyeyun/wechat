@@ -1,0 +1,15 @@
+#!/usr/bin/env php
+<?php
+/**
+ * @link http://www.touchsprite.com/
+ * @copyright Copyright (c) 2008 北京帮你玩科技有限公司
+ */
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+$config = require __DIR__ . '/config/main.php';
+
+$app = new \service\App($config);
+$app->run();
+
+exit(PHP_EOL);
