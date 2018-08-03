@@ -1,8 +1,8 @@
 <?php
 
 return [
-    'hostname' => '120.24.166.232',
+    'hostname' => '127.0.0.1',
     'port'     => 9005,
     'database' => 0,
-    'password' => 'xiaoyi',
+    'password' => 'nicai',
 ];

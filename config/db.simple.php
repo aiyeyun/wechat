@@ -7,13 +7,13 @@ return [
         // 数据库
         'database' => 'ts_p4u_test',
         // ip
-        'host'     => '120.24.166.232',
+        'host'     => '127.0.0.1',
         // 端口号
         'port'     => 3306,
         // 用户名
         'username' => 'root',
         // 密码
-        'password' => 'YTdKHY&H*&(JK=J=L-zAF&G',
+        'password' => 'root',
         // 表前缀
         'prefix'   => null,
         // 字符类型
