@@ -48,10 +48,23 @@ class WeCahtApiTool
      *
      * @author wang.haibo
      * @date   2018-08-03
+     * @param  string $_strOrderId
+     * @param  string $_strAccessToken
      * @return bool | array
      */
-    public static function sendGoods() {
-
+    public static function sendGoods($_strOrderId, $_strAccessToken = '') {
+        !$_strAccessToken ? $_strAccessToken = self::getAccessToken() : null;
+        // 置订单已发货标记
+        $aryConfirmData = [
+            'order_id' => $_strOrderId,
+            'delivery_company' => '',
+            'delivery_track_no' => '',
+            'need_delivery' => 0,
+            'is_others' => 0,
+        ];
+        $strUrl = 'https://api.weixin.qq.com/merchant/order/setdelivery?access_token='.$_strAccessToken;
+        $confirm_order_request = Network::curlReq($strUrl, true, json_encode($aryConfirmData));
+        return json_decode($confirm_order_request);
     }
 
     /**
@@ -73,7 +86,8 @@ class WeCahtApiTool
                 'content' => $_strMessage,
             ],
         ];
-        $send_order_request = Network::curlReq('https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token='.$_strAccessToken, true, json_encode($arySendData, JSON_UNESCAPED_UNICODE));
+        $strUrl = 'https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token='.$_strAccessToken;
+        $send_order_request = Network::curlReq($strUrl, true, json_encode($arySendData, JSON_UNESCAPED_UNICODE));
         return json_decode($send_order_request, true);
     }
 }

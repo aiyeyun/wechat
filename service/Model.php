@@ -46,7 +46,7 @@ abstract class Model
      * @param string $columns
      * @param array $_aryWhere
      * @throws \Exception
-     * @return array
+     * @return array|bool
      */
     public static function findOne($columns = '*', array $_aryWhere = []) {
         $db = self::getDbInstance();
@@ -56,13 +56,14 @@ abstract class Model
     /**
      * 查询
      *
+     * @param string $columns
      * @param array $_aryWhere
      * @throws \Exception
-     * @return array
+     * @return bool|array
      */
-    public static function findAll(array $_aryWhere = []) {
+    public static function findAll($columns = '*', array $_aryWhere = []) {
         $db = self::getDbInstance();
-        return $db->select(static::tableName(), '*', $_aryWhere);
+        return $db->select(static::tableName(), $columns, $_aryWhere);
     }
 
     /**
@@ -71,12 +72,27 @@ abstract class Model
      * @author wang.haibo
      * @date   2018-08-03
      * @param  array $_aryDatas
-     * @return bool
+     * @return bool|\PDOStatement
      * @throws \Exception
      */
     public static function insert(array $_aryDatas) {
         $db = self::getDbInstance();
         return $db->insert(static::tableName(), $_aryDatas);
+    }
+
+    /**
+     * 修改
+     *
+     * @author wang.haibo
+     * @date   2018-08-03
+     * @param  array $_aryColumns
+     * @param  array $_aryWhere
+     * @return bool|\PDOStatement
+     * @throws \Exception
+     */
+    public static function update(array $_aryColumns, array $_aryWhere = []) {
+        $db = self::getDbInstance();
+        return $db->update(static::tableName(), $_aryColumns, $_aryWhere);
     }
 
 }

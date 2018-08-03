@@ -34,7 +34,7 @@ class WechatShopOrderUtil
             1000 => [ 'order_type' => 31, 'order_nick' => '月卡' ],
             2500 => [ 'order_type' => 183, 'order_nick' => '半年卡' ],
             3000 => [ 'order_type' => 366, 'order_nick' => '年卡' ],
-            3000 => [ 'order_type' => 36600, 'order_nick' => '永久卡' ],
+            9800 => [ 'order_type' => 36600, 'order_nick' => '永久卡' ],
         ];
 
         if (isset($aryData[$_intPrice])) {

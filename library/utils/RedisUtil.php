@@ -20,7 +20,19 @@ class RedisUtil
      * @return string
      */
     public static function getWechatAccessTokenKey() {
-        return 'wechat_mall_access_token';
+        return 'wechat_shop_access_token';
+    }
+
+    /**
+     * 获取 微信 订单号 锁 redis key
+     *
+     * @author wang.haibo
+     * @date   2018-08-03
+     * @param  string $_strOrderId 订单号
+     * @return string
+     */
+    public static function getWechatOrderIdLockKey($_strOrderId) {
+        return 'wechat:shop:order:id:lock:'. $_strOrderId;
     }
 
 }

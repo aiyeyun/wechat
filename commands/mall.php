@@ -10,8 +10,11 @@ namespace commands;
 
 
 use library\curl\Network;
+use library\utils\RedisUtil;
+use library\utils\TskeyUtil;
 use library\utils\WechatShopOrderUtil;
 use library\wechat\WeCahtApiTool;
+use models\Tskey;
 use models\User;
 use models\WechatShopOrder;
 use service\Bnw;
@@ -84,6 +87,15 @@ class mall
      */
     private function dataJoinDb($_aryOrder) {
         foreach ($_aryOrder as $aryOrderInfo) {
+            // redis 加锁
+            $strKey = RedisUtil::getWechatOrderIdLockKey($aryOrderInfo['order_id']);
+            $lock = \redis\Redis::getStringCache($strKey);
+            if ($lock) {
+                continue;
+            }
+            // 订单号加锁 防止多进程 抢夺资源
+            \redis\Redis::setStringCache($strKey, $strKey, 86400*10);
+
             // 检查此订单是否已经入库
             $aryWechatOrder = WechatShopOrder::findOne('id', [ 'order_id[=]' => $aryOrderInfo['order_id'] ]);
             // 此订单已经入库
@@ -136,6 +148,7 @@ class mall
      * @param  array $_aryOrderInfo
      * @author wang.haibo
      * @date   2018-08-03
+     * @throws \Exception
      */
     private function sendGoods(array $_aryOrderInfo) {
         Bnw::$app->logger->info("微信订单号: {$_aryOrderInfo['order_id']} 正在准备发货");
@@ -143,10 +156,139 @@ class mall
         $aryGoodsDetails = WechatShopOrderUtil::getGoodsDetails($_aryOrderInfo['product_price']);
         // 购买的测试商品
         if ($aryGoodsDetails['order_type'] === 0) {
-            // 发送
+            // 微信小店发货
+            WeCahtApiTool::sendGoods($_aryOrderInfo['order_id']);
+            // 微信小店发货成功 订单状态更新
+            $this->sendGoodsSuccess($_aryOrderInfo);
+            // 发送 微信客服消息
             WeCahtApiTool::sendMsg('感谢您购买测试商品！', $_aryOrderInfo['buyer_openid']);
+            return;
         }
+
+        // 初始化变量 触动授权码
+        $strKeycodes = '';
+
+        // 订单是否已发货
+        $aryTskey = Tskey::findAll('keycode', [ 'tradeno' => $_aryOrderInfo['buyer_openid'] ]);
+        if ($aryTskey) {
+            Bnw::$app->logger->info("微信订单号: {$_aryOrderInfo['order_id']} 此订单已经发货");
+            foreach ($aryTskey as &$strKeycode) {
+                $strKeycode = trim($strKeycode);
+                $strKeycodes .= $aryGoodsDetails['order_nick'].' '.$strKeycode."\n";
+            }
+
+            // 发送 微信客服消息
+            // 构造返回消息
+            $strMessage = $_aryOrderInfo['receiver_name']."，您好。\n";
+            $strMessage .= "您的订单已完成支付，订单号：".(string)$_aryOrderInfo['order_id']." 。\n";
+            $strMessage .= "感谢您的购买与支持！\n";
+            $strMessage .= "授权码列表：\n".$strKeycodes;
+            WeCahtApiTool::sendMsg($strMessage, $_aryOrderInfo['buyer_openid']);
+            return;
+        }
+
+        Bnw::$app->logger->info("微信订单号: {$_aryOrderInfo['order_id']} 订单未发货,现开始发货");
+        // 提取触动授权码
+        $aryTskeyList = Tskey::findAll(
+            'keycode',
+            [
+                'vaildday' => $aryGoodsDetails['order_type'],
+                'status'   => TskeyUtil::STATUS_UNSHELF ,
+                // 提取 多少个授权码
+                'LIMIT' => $_aryOrderInfo['product_count'],
+            ]
+        );
+
+        // 库存不足 发货失败
+        if (!$aryTskeyList || count($aryTskeyList) != $_aryOrderInfo['product_count']) {
+            return $this->sendGoodsFail($_aryOrderInfo, $aryGoodsDetails['order_nick'].' 库存不足');
+        }
+
+        Bnw::$app->logger->info("微信订单号: {$_aryOrderInfo['order_id']} 正在提取触动授权码");
+        // 准备发货
+        foreach ($aryTskeyList as &$strKey) {
+            $strKey = trim($strKey);
+            $strKeycodes .= $aryGoodsDetails['order_nick'].' '.$strKey."\n";
+        }
+        Bnw::$app->logger->info("微信订单号: {$_aryOrderInfo['order_id']} 触动授权码提取完毕");
+        // 发货
+        $updateTskey = Tskey::update(
+            [
+                'status' => TskeyUtil::STATUS_UNUSED,
+                'tradeno' => $_aryOrderInfo['order_id'],
+                'buyer_id' => $_aryOrderInfo['buyer_openid'],
+                'buy_time' => time(),
+            ],
+            [ 'keycode' => $aryTskeyList ]
+        );
+
+        // 发货失败
+        if (!$updateTskey) {
+            return $this->sendGoodsFail($_aryOrderInfo, 'tskey 表发货失败');
+        }
+
+        // 微信小店接口发货
+        Bnw::$app->logger->info("微信订单号: {$_aryOrderInfo['order_id']} 微信小店接口发货");
+        WeCahtApiTool::sendGoods($_aryOrderInfo['order_id']);
+
+        // 发送 微信客服消息
+        // 构造返回消息
+        Bnw::$app->logger->info("微信订单号: {$_aryOrderInfo['order_id']} 发送微信客服消息");
+        $strMessage = $_aryOrderInfo['receiver_name']."，您好。\n";
+        $strMessage .= "您的订单已完成支付，订单号：".(string)$_aryOrderInfo['order_id']." 。\n";
+        $strMessage .= "感谢您的购买与支持！\n";
+        $strMessage .= "授权码列表：\n".$strKeycodes;
+        WeCahtApiTool::sendMsg($strMessage, $_aryOrderInfo['buyer_openid']);
     }
 
+    /**
+     * 发货失败 订单 更新
+     *
+     * @param  array $_aryOrderInfo
+     * @param  string $_strMessage
+     * @author wang.haibo
+     * @date   2018-08-03
+     * @throws \Exception
+     */
+    private function sendGoodsFail(array $_aryOrderInfo, $_strMessage) {
+        // 订单标记失败 并做好 笔记
+        $updateShopOrder = WechatShopOrder::update(
+            [
+                'status' => WechatShopOrderUtil::STATUS_FAIL,
+                'note'   => $_strMessage,
+                'update_at' => date('Y-m-d H:i:s')
+            ],
+            [ 'order_id[=]' => $_aryOrderInfo['order_id'] ]
+        );
+        if (!$updateShopOrder) {
+            throw new \Exception('微信订单号: '. $_aryOrderInfo['order_id'].' '. $_strMessage . ' 订单状态更新失败');
+        }
+        Bnw::$app->logger->info("微信订单号: {$_aryOrderInfo['order_id']} $_strMessage 发货失败");
+    }
+
+    /**
+     * 发货成功 订单 更新
+     *
+     * @author wang.haibo
+     * @date   2018-08-03
+     * @param  array $_aryOrderInfo
+     * @throws \Exception
+     */
+    private function sendGoodsSuccess(array $_aryOrderInfo) {
+        // 订单标记失败 并做好 笔记
+        $updateShopOrder = WechatShopOrder::update(
+            [
+                'status' => WechatShopOrderUtil::STATUS_SUCCESS,
+                'send_at' => date('Y-m-d H:i:s'),
+                'update_at' => date('Y-m-d H:i:s'),
+            ],
+            [ 'order_id[=]' => $_aryOrderInfo['order_id'] ]
+        );
+        if (!$updateShopOrder)
+        {
+            throw new \Exception('微信订单号: '. $_aryOrderInfo['order_id']. ' 微信小店接口发货成功 , 订单状态更新失败');
+        }
+        Bnw::$app->logger->info("微信订单号: {$_aryOrderInfo['order_id']} 微信小店接口 发货成功");
+    }
 
 }
